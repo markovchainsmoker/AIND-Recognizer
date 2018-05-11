@@ -2,17 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 def make_scatter(df):
     fig,axes=plt.subplots(nrows=1,ncols=2,figsize=(21,5))
     for ax in axes:
-        pass
-        #ax.set_ylim([-3.0,3.0])
-        #ax.set_xlim([-3.0,3.0])
+        ax.set_ylim([-2.0,2.0])
+        ax.set_xlim([-2.0,2.0])
                                     
     pairs=[('norm-lx','norm-ly'),('norm-rx','norm-ry')]
     for i in (0,1):
-        df.reset_index().head(100).plot(kind='scatter',x=pairs[i][0],y=pairs[i][1],c='frame',ax=axes[i])
+        df.reset_index().plot(kind='scatter',x=pairs[i][0],y=pairs[i][1],c='index',ax=axes[i])
+    return fig                                
+                        
 
 def features_list(text):
     return [text+'-'+side+dim for side in ('r','l') for dim in ('x','y')]
@@ -104,3 +104,31 @@ def likelihood_barchart(logL,word):
     plt.xlabel('logL')
     plt.title('log likelihood by features ({})'.format(word))
     plt.show()
+
+def dot_hmm(m):    
+    import pydot    
+    g = pydot.Dot()
+    g.rankdir='LR';
+
+    g.set_type('digraph')    
+    g.set_node_defaults(fontname = "helvetica",fontsize=10)    
+    g.set_edge_defaults(fontname = "helvetica",fontsize=9)        
+ 
+    for i in range(0,len(m)):
+        g.add_node(pydot.Node(name='state_'+str(i),label='state_'+str(i),penwidth=2,shape='square'))
+    
+    for i in range(0,len(m)):
+        for j in range(0,len(m)):
+            print('{}->{}:{}'.format(i,j,m[i,j]))
+            g.add_edge(pydot.Edge('state_'+str(i),'state_'+str(j),label='{:0.2f}'.format(m[i,j]),penwidth=1))
+        
+    return g.to_string()
+
+def show_model_stats(word, model):
+    print("Number of states trained in model for {} is {}".format(word, model.n_components))    
+    variance=np.array([np.diag(model.covars_[i]) for i in range(model.n_components)])    
+    for i in range(model.n_components):  # for each hidden state
+        print("hidden state #{}".format(i))
+        print("mean = ", model.means_[i])
+        print("variance = ", variance[i])
+        print()
