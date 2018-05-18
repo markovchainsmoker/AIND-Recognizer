@@ -74,7 +74,58 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        #warnings.filterwarnings("ignore", category=DeprecationWarning)
+        best_score, best_model  = float("inf"), None 
+        
+
+	model={k:self.base_model(k) for k in range(self.min_n_components, self.max_n_components+1)} 
+
+	logL={k:v.score(self.X,self.lengths)
+	bic=dict()
+	for k,v in model.items():
+		logL = model.score(v.X, v.lengths) 	 
+		# number of features
+		n = self.X.shape[1] 
+		# total parameter count
+                p = k * (k - 1) + 2 * n * k
+                logN = np.log(self.X.shape[0]) 
+                bic[k] = -2 * logL + p * logN 
+	
+	
+
+#                if bic < best_score: 
+ #                   best_score, best_model = bic, model 
+
+	for n_components in range(self.min_n_components, self.max_n_components+1): 
+            try: 
+                model = self.base_model(n_components)  
+                logL = model.score(self.X, self.lengths) 
+                n_features = self.X.shape[1] 
+                n_params = n_components * (n_components - 1) + 2 * n_features * n_components 
+                logN = np.log(self.X.shape[0]) 
+                bic = -2 * logL + n_params * logN 
+                if bic < best_score: 
+                    best_score, best_model = bic, model 
+            except Exception as e: 
+                continue 
+       
+        return best_model if best_model is not None else self.base_model(self.n_constant)
+
+
+class SelectorBIC2(ModelSelector):
+    """ select the model with the lowest Bayesian Information Criterion(BIC) score
+
+    http://www2.imm.dtu.dk/courses/02433/doc/ch6_slides.pdf
+    Bayesian information criteria: BIC = -2 * logL + p * logN
+    """
+
+    def select(self):
+        """ select the best model for self.this_word based on
+        BIC score for n between self.min_n_components and self.max_n_components
+
+        :return: GaussianHMM object
+        """
+       # warnings.filterwarnings("ignore", category=DeprecationWarning)
         best_score, best_model  = float("inf"), None 
           
         for n_components in range(self.min_n_components, self.max_n_components+1): 
