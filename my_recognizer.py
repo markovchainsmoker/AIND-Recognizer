@@ -21,7 +21,7 @@ def recognize(models: dict, test_set: SinglesData):
     probabilities = []
     guesses = []
     
-    # implement the recognizer
+    
     for index in range(test_set.num_items):
     
         top_prob, top_word = float("-inf"), None
