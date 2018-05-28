@@ -170,19 +170,20 @@ def likelihood_barchart(logL,word):
 def dot_hmm(m):    
     import pydot    
     g = pydot.Dot()
-    g.rankdir='LR';
+    g.set_rankdir('LR')
 
-    g.set_type('digraph')    
+    g.set_type('digraph') 
+
     g.set_node_defaults(fontname = "helvetica",fontsize=10)    
     g.set_edge_defaults(fontname = "helvetica",fontsize=9)        
- 
-    for i in range(0,len(m)):
-        g.add_node(pydot.Node(name='state_'+str(i),label='state_'+str(i),penwidth=2,shape='square'))
+    rng=range(0,len(m))
+    for i in rng:
+        g.add_node(pydot.Node(name='S_'+str(i+0),label='S_'+str(i+0),penwidth=2,shape='square'))
     
-    for i in range(0,len(m)):
-        for j in range(0,len(m)):
-            print('{}->{}:{}'.format(i,j,m[i,j]))
-            g.add_edge(pydot.Edge('state_'+str(i),'state_'+str(j),label='{:0.2f}'.format(m[i,j]),penwidth=1))
+    for i in rng:
+        for j in rng:
+            #print('{}->{}:{}'.format(i,j,m[i,j]))
+            g.add_edge(pydot.Edge('S_'+str(i),'S_'+str(j),label='{:0.3f}'.format(m[i,j]),penwidth=1))
         
     return g.to_string()
 
@@ -238,6 +239,9 @@ def replicate_model():
 
 def plot_states(model,n_samples=100,fig_size=(12,6),lim=3):
     from matplotlib import patches 
+    #set starting state to S1
+    model.startprob_=np.array([1.0,0.0,0.0])
+    #run 100 samples
     X,Z=model.sample(n_samples)
     L,R=pd.DataFrame({'x':X[:,0],'y':X[:,1]}),pd.DataFrame({'x':X[:,2],'y':X[:,3]})
     fig,axes=plt.subplots(nrows=1,ncols=2,figsize=(12,6),sharey=True)
@@ -246,14 +250,14 @@ def plot_states(model,n_samples=100,fig_size=(12,6),lim=3):
 
     for i, m in enumerate(model.means_):
         x,y=m[0],m[1]
-        axes[0].text(m[0], m[1], 'S%i' % (i + 1),
+        axes[0].text(m[0], m[1], 'S%i' % (i ),
                 size=10, horizontalalignment='center',
                 bbox=dict(alpha=.7, facecolor='w'))
         variance=np.array(np.diag(model.covars_[i]))
         ellipse=patches.Ellipse((m[0], m[1]), np.sqrt(variance[0]),np.sqrt(variance[1]), color='r')
         axes[0].add_artist(ellipse)
 
-        axes[1].text(m[2], m[3], 'S%i' % (i + 1),
+        axes[1].text(m[2], m[3], 'S%i' % (i ),
                 size=10, horizontalalignment='center',
                 bbox=dict(alpha=.7, facecolor='w'))
         ellipse=patches.Ellipse((m[2], m[3]), np.sqrt(variance[2]),np.sqrt(variance[3]), color='r')
@@ -266,4 +270,25 @@ def plot_states(model,n_samples=100,fig_size=(12,6),lim=3):
         axes[1].set_ylim(-lim,lim)
     return fig
 
+def make_summary(report):
+    selectors=[SelectorCV,SelectorBIC,SelectorDIC]
+    selector_names=[s.__name__ for s in selectors]
 
+    summary=report.drop(['video','speaker','startframe','endframe'],axis=1)
+    for selector_name in selector_names:
+        summary[selector_name]=(report[selector_name]==report.word).astype(int)
+    summary=summary.groupby('word').sum()
+    summary['N']=report.groupby('word').count().len
+    summary['avg len']=summary.len/summary.N.astype(float)
+    top10=summary.sort_values(by='N',ascending=False).drop('len',axis=1).head(10)
+    top10
+    return summary,top10
+
+def compare_wer(wer):
+    wer_comparison=pd.DataFrame.from_records(wer)
+    from scipy import stats
+    wer_comparison.loc[-1]=stats.hmean(wer_comparison,axis=0)
+    wer_comparison.reset_index(inplace=True)
+    wer_comparison['index'].loc[3]='harm-mean'
+    wer_comparison.set_index('index',inplace=True)
+    return wer_comparison
