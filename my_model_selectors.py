@@ -69,174 +69,137 @@ class SelectorBIC(ModelSelector):
     """
 
     def select(self):
-        """ select the best model for self.this_word based on
-        BIC score for n between self.min_n_components and self.max_n_components
-
-        :return: GaussianHMM object
-        """
-        #warnings.filterwarnings("ignore", category=DeprecationWarning)
-        best_score, best_model  = float("inf"), None 
-        
-
-	model={k:self.base_model(k) for k in range(self.min_n_components, self.max_n_components+1)} 
-
-	logL={k:v.score(self.X,self.lengths)
-	bic=dict()
-	for k,v in model.items():
-		logL = model.score(v.X, v.lengths) 	 
-		# number of features
-		n = self.X.shape[1] 
-		# total parameter count
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        def catch(func, handle=lambda e : e, *args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                return handle(e)
+        #set up all models, then run the BIC method onn them
+        model={k:self.base_model(k) for k in range(self.min_n_components, self.max_n_components)}
+        def BIC(model):
+            
+            #if not model.monitor_.converged:
+            #    return float('inf')
+#            logL=catch(model.score(self.X, self.lengths))
+            try:
+                logL = model.score(self.X, self.lengths)
+                # number of features
+                n = self.X.shape[1] 
+                # number of states
+                k = model.n_components
+	        # total parameter count
                 p = k * (k - 1) + 2 * n * k
                 logN = np.log(self.X.shape[0]) 
-                bic[k] = -2 * logL + p * logN 
-	
-	
-
-#                if bic < best_score: 
- #                   best_score, best_model = bic, model 
-
-	for n_components in range(self.min_n_components, self.max_n_components+1): 
-            try: 
-                model = self.base_model(n_components)  
-                logL = model.score(self.X, self.lengths) 
-                n_features = self.X.shape[1] 
-                n_params = n_components * (n_components - 1) + 2 * n_features * n_components 
-                logN = np.log(self.X.shape[0]) 
-                bic = -2 * logL + n_params * logN 
-                if bic < best_score: 
-                    best_score, best_model = bic, model 
-            except Exception as e: 
-                continue 
-       
-        return best_model if best_model is not None else self.base_model(self.n_constant)
-
-
-class SelectorBIC2(ModelSelector):
-    """ select the model with the lowest Bayesian Information Criterion(BIC) score
-
-    http://www2.imm.dtu.dk/courses/02433/doc/ch6_slides.pdf
-    Bayesian information criteria: BIC = -2 * logL + p * logN
-    """
-
-    def select(self):
-        """ select the best model for self.this_word based on
-        BIC score for n between self.min_n_components and self.max_n_components
-
-        :return: GaussianHMM object
-        """
-       # warnings.filterwarnings("ignore", category=DeprecationWarning)
-        best_score, best_model  = float("inf"), None 
-          
-        for n_components in range(self.min_n_components, self.max_n_components+1): 
-            try: 
-                model = self.base_model(n_components)  
-                logL = model.score(self.X, self.lengths) 
-                n_features = self.X.shape[1] 
-                n_params = n_components * (n_components - 1) + 2 * n_features * n_components 
-                logN = np.log(self.X.shape[0]) 
-                bic = -2 * logL + n_params * logN 
-                if bic < best_score: 
-                    best_score, best_model = bic, model 
-            except Exception as e: 
-                continue 
-       
-        return best_model if best_model is not None else self.base_model(self.n_constant) 
-  
-
+                return -2 * logL + p * logN
+            except Exception as e:
+                return float('inf')
+        
+        bic={k:BIC(v) for k,v in model.items() if v != None}
+        return model[min(bic, key=lambda key: bic[key])]
 
 class SelectorDIC(ModelSelector):
-    ''' select best model based on Discriminative Information Criterion
+    #initialise these as empty class attributes to SelectorDIC
+    models=dict()
+    scores=dict()
+    failed=dict()
 
-    Biem, Alain. "A model selection criterion for classification: Application to hmm topology optimization."
-    Document Analysis and Recognition, 2003. Proceedings. Seventh International Conference on. IEEE, 2003.
-    http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.58.6208&rep=rep1&type=pdf
-    https://pdfs.semanticscholar.org/ed3d/7c4a5f607201f3848d4c02dd9ba17c791fc2.pdf
-    DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
-    '''
-    models,values={},{}
+    #static method since it needs not refer neither class nor instance 
+    @staticmethod
+    def fit_model(n_states,Xlengths):
+        try:
+            return GaussianHMM(n_components=n_states,covariance_type='diag',n_iter=1000,random_state=14,verbose=False).fit(*Xlengths)
+        except Exception as e:
+            return None
 
-    @classmethod 
-    def generate_dictionary(cls, inst):         
-        for n_components in range(inst.min_n_components, inst.max_n_components+1): 
-            n_components_models, n_components_ml = {}, {} 
-              
-            for word in inst.words.keys(): 
-                X, lengths = inst.hwords[word] 
-                try: 
-                    model = GaussianHMM(n_components=n_components, covariance_type="diag", n_iter=1000, random_state=inst.random_state, verbose=self.verbose).fit(X, lengths) 
-                    logL = model.score(X, lengths) 
-                    n_components_models[word] = model 
-                    n_components_ml[word] = logL 
-                except Exception as e: 
-                    continue 
-              
-            SelectorDIC.models[n_components] = n_components_models 
-            SelectorDIC.values[n_components] = n_components_ml 
- 
- 
-    def select(self): 
-        warnings.filterwarnings("ignore", category=DeprecationWarning) 
-          
-         # implement model selection based on DIC scores 
-        if len(SelectorDIC.models) == 0: 
-            self.generate_dictionary(self) 
-          
+    @staticmethod
+    def get_logL(model):
+        try:
+            return model.score()
+        except Exception as e:
+            return None
 
-        best_score, best_model = float("-inf"), None 
-          
-        for n_components in range(self.min_n_components, self.max_n_components + 1): 
-            models, ml = SelectorDIC.models[n_components], SelectorDIC.values[n_components] 
-              
-            if(self.this_word not in ml): 
-                continue 
-              
-            avg = np.mean([ml[word] for word in ml.keys() if word != self.this_word]) 
-            dic = ml[self.this_word] - avg 
-              
-            if dic > best_score: 
-                best_score, best_model = dic, models[self.this_word] 
-                  
-        return best_model if best_model is not None else self.base_model(self.n_constant) 
+    #class method, precalculates all models to reduce incremental select time to close to zero
+    @classmethod
+    def init_models(cls, inst): 
+
+        for n_states in range(inst.min_n_components, inst.max_n_components+1): 
+            SelectorDIC.models[n_states]={k:SelectorDIC.fit_model(n_states=n_states,Xlengths=v) for k,v in inst.hwords.items()}
+            SelectorDIC.scores[n_states]=dict()
+            n=0
+            for k,v in SelectorDIC.models[n_states].items():
+                try:
+                    SelectorDIC.scores[n_states][k]=v.score(*inst.hwords[k]) 
+                except Exception as e:
+                    n+=1
+                    continue
+            SelectorDIC.failed[n_states]=n
+            
+    #this init is just to add our init_models
+    def __init__(self, all_word_sequences: dict, all_word_Xlengths: dict, this_word: str,n_constant=3,
+            min_n_components=2, max_n_components=10,random_state=14, verbose=False):
+        super().__init__(all_word_sequences=all_word_sequences, all_word_Xlengths=all_word_Xlengths, this_word=this_word,
+                n_constant=n_constant,min_n_components=min_n_components, max_n_components=max_n_components,random_state=random_state, verbose=False)
+        if len(SelectorDIC.models)==0:
+            self.init_models(self)
+
+    def select(self):
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        best_score,best_model = float('-inf'),None
+        for n_states in range(self.min_n_components,self.max_n_components+1):
+            models,scores=SelectorDIC.models[n_states],SelectorDIC.scores[n_states]            
+            
+            if(self.this_word in list(scores.keys())):
+            
+                score=scores[self.this_word]
+                dic=score-np.mean([v for k,v in scores.items() if k!=self.this_word])
+                dic2=score-(sum(scores.values())-score)/(len(scores.values())-1)
+                assert abs(dic/dic2-1)<1e-6 , '{} {} {}'.format(n_states,dic,dic2)
+                #two equivalent ways to set up the calculation
+                     
+                if dic>best_score:
+                    best_score,best_model=dic,models[self.this_word]
+        return best_model
  
  
 class SelectorCV(ModelSelector):
 
-    n_splits = 3 
- 
+    @staticmethod
+    def fit_model(n_states,Xlengths):
+        #warnings.filterwarnings('ignore',category=DepreciationWarning)
+        try:
+            return GaussianHMM(n_components=n_states,covariance_type='diag',n_iter=1000,random_state=14,verbose=False).fit(*Xlengths)
+        except Exception as e:
+            return None
  
     def select(self): 
         warnings.filterwarnings("ignore", category=DeprecationWarning) 
+        n_splits = 3 
  
- 
-        # implement model selection using CV 
+        #basic logL maximation but for splits using KFold 
         best_score, best_model = float("-inf"), None 
           
-        for n_components in range(self.min_n_components, self.max_n_components + 1): 
-            scores, n_splits = [], SelectorCV.n_splits 
+        for n_states in range(self.min_n_components, self.max_n_components + 1): 
+            scores, n_splits = [], n_splits 
             model, logL = None, None 
-              
+            #we need at least as many sequences as n_splits   
             if(len(self.sequences) < n_splits): 
                 break 
               
             split_method = KFold(random_state=self.random_state, n_splits=n_splits) 
             for cv_train_idx, cv_test_idx in split_method.split(self.sequences): 
-                X_train, lengths_train = combine_sequences(cv_train_idx, self.sequences) 
-                X_test,  lengths_test  = combine_sequences(cv_test_idx, self.sequences) 
-                try: 
-                    model = GaussianHMM(n_components=n_components, covariance_type="diag", n_iter=1000, random_state=inst.random_state, verbose=self.verbose).fit(X_train, lengths_train) 
-                    logL = model.score(X_test, lengths_test) 
-                    scores.append(logL) 
-                except Exception as e: 
-                    break 
-              
-            avg = np.average(scores) if len(scores) > 0 else float("-inf") 
-              
-            if avg > best_score: 
-                best_score, best_model = avg, model 
-          
-        return best_model if best_model is not None else self.base_model(self.n_constant) 
-
-
-
-
+                Xlengths_train = combine_sequences(cv_train_idx, self.sequences) 
+                Xlengths_test  = combine_sequences(cv_test_idx, self.sequences) 
+                
+                model=SelectorCV.fit_model(n_states=n_states,Xlengths=Xlengths_train)
+                if(model):
+                    try:
+                        logL=model.score(*Xlengths_test)
+                        scores.append(logL)
+                    except Exception as e:
+                        pass
+            avg=np.mean(scores) if len(scores)>0 else float('-inf')
+            if avg>best_score:
+                best_score,best_model=avg,model
+        return best_model if best_model is not None else self.base_model(self.n_constant)
+                
